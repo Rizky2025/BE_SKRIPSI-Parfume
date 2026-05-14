@@ -1,16 +1,21 @@
 const supabase = require('../config/supabase');
 
 const saveFavorite = async (userId, name, brand, notes) => {
-    // Cek duplikat dulu — jangan simpan parfum yang sama dua kali
-    const { data: existing } = await supabase
+    // FIX: Gunakan .maybeSingle() agar tidak melempar error jika parfum belum ada di database
+    const { data: existing, error: checkError } = await supabase
         .from('favorites')
         .select('id')
         .eq('user_id', userId)
         .eq('perfume_name', name)
-        .single();
+        .maybeSingle(); 
+
+    if (checkError) {
+        console.error("[Supabase] Error saat mengecek duplikat:", checkError);
+        throw checkError;
+    }
 
     if (existing) {
-        const err = new Error('Parfum ini sudah ada di favorit Anda.');
+        const err = new Error('Parfum ini sudah ada di daftar simpan Anda.');
         err.code = 'DUPLICATE';
         throw err;
     }
@@ -20,7 +25,10 @@ const saveFavorite = async (userId, name, brand, notes) => {
         .insert([{ user_id: userId, perfume_name: name, perfume_brand: brand, notes }])
         .select();
 
-    if (error) throw error;
+    if (error) {
+        console.error("[Supabase] Error saat insert data:", error);
+        throw error;
+    }
     return data;
 };
 
@@ -29,15 +37,16 @@ const getFavoritesByUser = async (userId) => {
         .from('favorites')
         .select('*')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false }); // terbaru dulu
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+        console.error("[Supabase] Error saat mengambil data:", error);
+        throw error;
+    }
     return data;
 };
 
-// Hapus favorit berdasarkan id (UUID dari tabel favorites)
 const deleteFavorite = async (favId, userId) => {
-    // Pastikan yang menghapus adalah pemiliknya
     const { data, error } = await supabase
         .from('favorites')
         .delete()
@@ -45,7 +54,11 @@ const deleteFavorite = async (favId, userId) => {
         .eq('user_id', userId)
         .select();
 
-    if (error) throw error;
+    if (error) {
+        console.error("[Supabase] Error saat menghapus data:", error);
+        throw error;
+    }
+    
     if (!data || data.length === 0) {
         const err = new Error('Data tidak ditemukan atau bukan milik Anda.');
         err.code = 'NOT_FOUND';
